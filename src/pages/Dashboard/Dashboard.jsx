@@ -1,619 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getDesksBySection } from '../../services/deskService'
+import { getDesksBySection, setDeskActiveStatus } from '../../services/deskService'
 import { bookDesk, getDeskBookings } from '../../services/bookingService'
 import { resetPassword, addUser } from '../../services/authService'
-const SEATS_PER_ROW = 20
-const AISLE_AFTER = 40
 import { useAuth } from '../../context/AuthContext'
 
-const SECTIONS = [
-    {
-        id: 'CSM',
-        label: 'CSM',
-        description: 'Customer Success Management',
-        start: 1,
-        end: 50,
-    },
-    {
-        id: 'BOTTOM',
-        label: 'Bottom',
-        description: 'Bottom Wing',
-        start: 51,
-        end: 150,
-    },
-    {
-        id: 'RIGHT',
-        label: 'Right',
-        description: 'Right Wing',
-        start: 151,
-        end: 200,
-    },
-    {
-        id: 'TOP',
-        label: 'Top',
-        description: 'Bay Area',
-        start: 201,
-        end: 230,
-    },
-]
+import { SECTIONS } from './constants'
+import { getToday, getBookingErrorMessage } from './utils'
+import ChairIcon from './components/ChairIcon'
+import StatusDot from './components/StatusDot'
+import DeskButton from './components/DeskButton'
+import SectionSelector from './components/SectionSelector'
+import SectionDeskMap from './components/SectionDeskMap'
+import StatCard from './components/StatCard'
+import BookingDetails from './components/BookingDetails'
+import SuccessDialog from './components/SuccessDialog'
 
-function getToday() {
-    const today = new Date()
-    const year = today.getFullYear()
-    const month = String(today.getMonth() + 1).padStart(2, '0')
-    const day = String(today.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-}
-
-function getBookingErrorMessage(error) {
-    switch (error.errorCode) {
-        case 'DESK_NOT_ACTIVE':
-            return 'This desk is currently inactive and cannot be booked.'
-
-        case 'DESK_UNAVAILABLE':
-            return 'This desk is currently unavailable.'
-
-        case 'INVALID_BOOKING_DATE':
-            return 'You cannot book a date in the past.'
-
-        case 'INVALID_DATE_RANGE':
-            return 'The end date cannot be before the start date.'
-
-        case 'BOOKING_CONFLICTS':
-            return error.message || 'None of the selected dates are available.'
-
-        case 'DESK_ALREADY_BOOKED':
-            return 'This desk was just booked by another user. Please refresh and select another desk.'
-
-        case 'SESSION_EXPIRED':
-            return 'Your session has expired. Please log in again.'
-
-        default:
-            return error.message || 'Unable to complete the booking. Please try again.'
-    }
-}
-
-function formatDate(date) {
-    if (!date) return '-'
-
-    const [year, month, day] = String(date).split('-')
-    if (!year || !month || !day) return date
-
-    return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString(
-        'en-IN',
-        {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-        }
-    )
-}
-
-function getSkipReason(reason) {
-    switch (reason) {
-        case 'USER_ALREADY_BOOKED':
-            return 'You already have a booking'
-        case 'DESK_ALREADY_BOOKED':
-            return 'Desk was already booked'
-        default:
-            return reason || 'Date was unavailable'
-    }
-}
-
-function ChairIcon({ color = 'currentColor' }) {
-    return (
-        <svg
-            viewBox="0 0 25 25"
-            fill={color}
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-full w-full"
-            aria-hidden="true"
-        >
-            <rect x="5" y="3" width="14" height="6" rx="2" />
-            <rect x="4" y="10" width="16" height="5" rx="2" />
-            <rect x="5" y="15" width="2.5" height="6" rx="1" />
-            <rect x="16.5" y="15" width="2.5" height="6" rx="1" />
-            <rect x="2" y="9" width="3" height="2" rx="1" />
-            <rect x="19" y="9" width="3" height="2" rx="1" />
-        </svg>
-    )
-}
-
-function StatusDot({ status }) {
-    const className =
-        status === 'AVAILABLE'
-            ? 'bg-success'
-            : status === 'BOOKED'
-                ? 'bg-error'
-                : status === 'INACTIVE'
-                    ? 'bg-base-content/25'
-                    : 'bg-warning'
-
-    return <span className={`h-2.5 w-2.5 rounded-full ${className}`} />
-}
-
-function DeskButton({ desk, isSelected, onClick, isTopRow }) {
-    const isBooked = desk.status === 'BOOKED'
-    const isInactive = desk.status === 'INACTIVE'
-    const isUnavailable = desk.status === 'UNAVAILABLE'
-    const isDisabled = isInactive || isUnavailable
-
-    let containerClass = ''
-    let iconColor = ''
-
-    if (isInactive) {
-        containerClass =
-            'border-base-300 bg-base-300/60 text-base-content/30 cursor-not-allowed'
-        iconColor = '#94a3b8'
-    } else if (isUnavailable) {
-        containerClass =
-            'border-warning/30 bg-warning/10 text-warning cursor-not-allowed'
-        iconColor = '#f59e0b'
-    } else if (isBooked) {
-        containerClass =
-            'border-error/30 bg-error/10 text-error hover:bg-error/15 cursor-pointer'
-        iconColor = '#fb7185'
-    } else if (isSelected) {
-        containerClass =
-            'border-primary bg-primary text-primary-content ring-4 ring-primary/20 shadow-lg scale-105'
-        iconColor = 'white'
-    } else {
-        containerClass =
-            'border-success/30 bg-success/5 text-success hover:bg-success/15 hover:border-success hover:-translate-y-0.5 hover:shadow-md cursor-pointer'
-        iconColor = '#22c55e'
-    }
-
-    return (
-        <div className="group relative flex justify-center">
-            <div
-                className={`pointer-events-none invisible absolute left-1/2 z-30 w-max -translate-x-1/2 rounded-lg bg-neutral px-3 py-2 text-xs text-neutral-content opacity-0 shadow-lg transition-all duration-150 group-hover:visible group-hover:opacity-100
-                     ${isTopRow
-                        ? 'top-[calc(100%+8px)]'
-                        : 'bottom-[calc(100%+8px)]'
-                    }`}
-            >
-                <div className="font-semibold">
-                    Desk {desk.deskNumber}
-                </div>
-                <div className="mt-0.5 opacity-70">{desk.status}</div>
-                {desk.bookedBy && (
-                    <div className="mt-1 max-w-40 truncate opacity-80">
-                        {desk.bookedBy}
-                    </div>
-                )}
-            </div>
-
-            <button
-                type="button"
-                disabled={isDisabled}
-                aria-label={`Desk ${desk.deskNumber}, ${desk.status}`}
-                aria-pressed={isSelected}
-                onClick={() => onClick(desk)}
-                className={`relative aspect-square w-16 rounded-xl border transition-all duration-150 select-none ${containerClass}`}
-            >
-                <div className="flex h-full flex-col items-center justify-center">
-                    <div className="h-6 w-6 sm:h-7 sm:w-7">
-                        <ChairIcon color={iconColor} />
-                    </div>
-                    <span className="text-xs font-bold">{desk.deskNumber}</span>
-                </div>
-            </button>
-        </div >
-    )
-}
-
-function SectionSelector({ selectedSection, onSectionChange }) {
-    return (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {SECTIONS.map(section => {
-                const isSelected = selectedSection === section.id
-                const total = section.end - section.start + 1
-
-                return (
-                    <button
-                        key={section.id}
-                        type="button"
-                        onClick={() => onSectionChange(section.id)}
-                        className={`rounded-2xl border p-4 text-left transition-all duration-150 ${isSelected
-                            ? 'border-primary bg-primary/10 ring-1 ring-primary'
-                            : 'border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100'
-                            }`}
-                    >
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <span className="font-bold">{section.label}</span>
-                                </div>
-                                <div className="mt-1 text-xs opacity-50">
-                                    {section.description}
-                                </div>
-                            </div>
-                            <span className="badge badge-ghost shrink-0">
-                                {total}
-                            </span>
-                        </div>
-                    </button>
-                )
-            })}
-        </div>
-    )
-}
-
-function SectionDeskMap({
-    desks,
-    selectedSection,
-    selected,
-    onDeskClick,
-    date,
-    setDate,
-    loading,
-}) {
-    const section = SECTIONS.find(item => item.id === selectedSection)
-
-    const rows = useMemo(() => {
-        const sorted = [...desks].sort(
-            (a, b) => a.deskNumber - b.deskNumber
-        )
-
-        const result = []
-        for (let i = 0; i < sorted.length; i += SEATS_PER_ROW) {
-            result.push(sorted.slice(i, i + SEATS_PER_ROW))
-        }
-        return result
-    }, [desks])
-
-    if (!section) return null
-
-    return (
-        <div className="overflow-hidden rounded-3xl border border-base-300 bg-base-100 shadow-sm">
-            <div className="border-b border-base-300 px-5 py-5 sm:px-6">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                        <div className="flex flex-wrap items-center gap-3">
-                            <h2 className="text-lg font-bold">{section.label}</h2>
-                            <span className="badge badge-ghost">
-                                {section.end - section.start + 1} desks
-                            </span>
-                        </div>
-                        <p className="mt-1 text-sm opacity-55">
-                            Select a desk to view details or make a booking.
-                        </p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-4">
-                        <label className="flex items-center gap-2 text-sm">
-                            <span className="opacity-60">Date</span>
-                            <input
-                                type="date"
-                                value={date}
-                                min={getToday()}
-                                onChange={e => setDate(e.target.value)}
-                                className="input input-bordered input-sm"
-                            />
-                        </label>
-
-                        <div className="flex flex-wrap items-center gap-3 text-xs opacity-75">
-                            <span className="flex items-center gap-1.5">
-                                <StatusDot status="AVAILABLE" /> Available
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <StatusDot status="BOOKED" /> Booked
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                                <StatusDot status="INACTIVE" /> Inactive
-                            </span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="p-4 sm:p-6">
-                <div className="rounded-2xl border border-base-300/60 bg-base-200/40 p-3 sm:p-5">
-                    <div className="mb-4 flex items-center justify-between text-xs opacity-50">
-                        <span>{formatDate(date)}</span>
-                        <span>{desks.length} desks loaded</span>
-                    </div>
-
-                    {loading ? (
-                        <div className="flex min-h-72 items-center justify-center">
-                            <div className="flex flex-col items-center gap-3">
-                                <span className="loading loading-spinner loading-lg text-primary" />
-                                <span className="text-sm opacity-60">
-                                    Loading {section.label} desks...
-                                </span>
-                            </div>
-                        </div>
-                    ) : rows.length === 0 ? (
-                        <div className="flex min-h-72 items-center justify-center rounded-xl border border-dashed border-base-300">
-                            <div className="text-center">
-                                <p className="font-semibold">No desks found</p>
-                                <p className="mt-1 text-sm opacity-50">
-                                    Try another section or date.
-                                </p>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="space-y-4 overflow-x-auto pb-1">
-                            {rows.map((row, rowIndex) => {
-                                const sectionDesks = row.slice(0, 15)
-                                // const right = row.slice(4)
-
-                                return (
-                                    <div
-                                        key={`row-${rowIndex}`}
-                                    >
-                                        <div className="grid grid-cols-15 gap-x-2 gap-y-3 w-fit mx-auto">
-                                            {sectionDesks.map(desk => (
-                                                <DeskButton
-                                                    key={desk.deskId}
-                                                    desk={desk}
-                                                    isSelected={
-                                                        selected === desk.deskId
-                                                    }
-                                                    onClick={onDeskClick}
-                                                    isTopRow={rowIndex == 0}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-function StatCard({ label, value, tone = 'neutral', helper }) {
-    const styles = {
-        success: 'border-success/20 bg-success/10 text-success',
-        error: 'border-error/20 bg-error/10 text-error',
-        warning: 'border-warning/20 bg-warning/10 text-warning',
-        neutral: 'border-base-300 bg-base-100',
-    }
-
-    return (
-        <div className={`rounded-2xl border p-4 ${styles[tone]}`}>
-            <div className="flex items-start justify-between gap-3">
-                <div>
-                    <p className="text-xs font-medium opacity-65">{label}</p>
-                    <p className="mt-1 text-2xl font-bold">{value}</p>
-                </div>
-                {helper && (
-                    <span className="text-right text-[11px] opacity-50">
-                        {helper}
-                    </span>
-                )}
-            </div>
-        </div>
-    )
-}
-
-function BookingDetails({ selectedDesk, deskBookings, loading }) {
-    const bookings = deskBookings.flatMap(item => {
-        if (!Array.isArray(item.bookings)) return []
-
-        return item.bookings.map(booking => ({
-            bookingId: booking.bookingId,
-            date: booking.date,
-            status: item.status,
-            bookedBy: item.bookedBy,
-        }))
-    })
-
-    return (
-        <div className="mt-6">
-            <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Current booking</h3>
-
-                {bookings.length > 0 && (
-                    <span className="badge badge-ghost">
-                        {bookings.length}
-                    </span>
-                )}
-            </div>
-
-            <div className="mt-3 space-y-3">
-                {loading && (
-                    <div className="flex justify-center rounded-xl border border-base-300 bg-base-200 py-8">
-                        <span className="loading loading-spinner loading-md" />
-                    </div>
-                )}
-
-                {!loading && bookings.length > 0 && (
-                    bookings.map(booking => (
-                        <div
-                            key={booking.bookingId}
-                            className="rounded-xl border border-error/20 bg-error/5 p-4"
-                        >
-                            <div className="flex items-center justify-between gap-3">
-                                <div>
-                                    <p className="text-xs opacity-50">
-                                        Booked by
-                                    </p>
-
-                                    <p className="mt-1 font-semibold">
-                                        {booking.bookedBy || 'Unknown'}
-                                    </p>
-                                </div>
-
-                                <span className="badge badge-error badge-sm">
-                                    BOOKED
-                                </span>
-                            </div>
-
-                            <div className="mt-4">
-                                <p className="text-xs opacity-50">
-                                    Booking date
-                                </p>
-
-                                <p className="mt-1 text-sm font-medium">
-                                    {formatDate(booking.date)}
-                                </p>
-                            </div>
-                        </div>
-                    ))
-                )}
-
-                {!loading && bookings.length === 0 && (
-                    <div className="rounded-xl border border-base-300 bg-base-200 p-4 text-sm opacity-60">
-                        No booking details are available for this desk.
-                    </div>
-                )}
-            </div>
-        </div>
-    )
-}
-function SuccessDialog({ dialog, onClose }) {
-    if (!dialog.open) return null
-
-    const bookedDates = Array.isArray(dialog.booking?.bookings)
-        ? dialog.booking.bookings
-        : []
-
-    const skippedDates = Array.isArray(dialog.booking?.skippedDates)
-        ? dialog.booking.skippedDates
-        : []
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-            <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-base-100 shadow-2xl">
-                <div className="flex justify-center pt-7">
-                    <div
-                        className={`flex h-16 w-16 items-center justify-center rounded-full ${dialog.type === 'success'
-                            ? 'bg-success/15 text-success'
-                            : 'bg-error/15 text-error'
-                            }`}
-                    >
-                        {dialog.type === 'success' ? (
-                            <svg
-                                className="h-9 w-9"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M5 13l4 4L19 7"
-                                />
-                            </svg>
-                        ) : (
-                            <svg
-                                className="h-9 w-9"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                            >
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M6 18L18 6M6 6l12 12"
-                                />
-                            </svg>
-                        )}
-                    </div>
-                </div>
-
-                <div className="px-6 pb-6 pt-5 text-center">
-                    <h3 className="text-xl font-bold">{dialog.title}</h3>
-
-                    {dialog.booking ? (
-                        <div className="mt-5 space-y-3 text-left">
-                            <div className="rounded-xl bg-base-200 p-4">
-                                <p className="text-xs opacity-50">Desk</p>
-                                <p className="mt-1 text-lg font-bold">
-                                    Desk {dialog.booking.deskNumber ?? '-'}
-                                </p>
-                            </div>
-
-                            {bookedDates.length > 0 && (
-                                <div className="rounded-xl bg-base-200 p-4">
-                                    <p className="text-xs opacity-50">
-                                        Confirmed booking{bookedDates.length > 1 ? 's' : ''}
-                                    </p>
-
-                                    <div className="mt-3 space-y-2">
-                                        {bookedDates.map(booking => (
-                                            <div
-                                                key={booking.bookingId}
-                                                className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                                            >
-                                                <span className="font-medium">
-                                                    {formatDate(booking.date)}
-                                                </span>
-
-                                                <span className="badge badge-success badge-sm">
-                                                    BOOKED
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {Array.isArray(dialog.booking.bookedDates) &&
-                                dialog.booking.bookedDates.length > 0 && (
-                                    <div className="rounded-xl bg-base-200 p-4">
-                                        <p className="text-xs opacity-50">
-                                            Dates booked
-                                        </p>
-                                        <p className="mt-2 text-sm font-medium leading-6">
-                                            {dialog.booking.bookedDates
-                                                .map(formatDate)
-                                                .join(' · ')}
-                                        </p>
-                                    </div>
-                                )}
-
-                            {skippedDates.length > 0 && (
-                                <div className="rounded-xl border border-warning/20 bg-warning/10 p-4">
-                                    <p className="text-xs font-semibold text-warning">
-                                        Dates skipped
-                                    </p>
-                                    <div className="mt-2 space-y-1 text-sm">
-                                        {skippedDates.map(item => (
-                                            <div
-                                                key={`${item.date}-${item.reason}`}
-                                                className="flex flex-wrap justify-between gap-2"
-                                            >
-                                                <span>{formatDate(item.date)}</span>
-                                                <span className="opacity-70">
-                                                    {getSkipReason(item.reason)}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <p className="mt-2 text-sm text-base-content/60">
-                            {dialog.message}
-                        </p>
-                    )}
-
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className={`btn mt-6 w-full ${dialog.type === 'success'
-                            ? 'btn-success'
-                            : 'btn-error'
-                            }`}
-                    >
-                        {dialog.type === 'success' ? 'Done' : 'Close'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-function Dashboard() {
+export default function Dashboard() {
     const { user, logout } = useAuth()
     const [desks, setDesks] = useState([])
     const [loading, setLoading] = useState(true)
@@ -624,6 +26,7 @@ function Dashboard() {
     const [bookingToDate, setBookingToDate] = useState('')
     const [deskBookings, setDeskBookings] = useState([])
     const [loadingDeskBookings, setLoadingDeskBookings] = useState(false)
+    const [updatingDeskStatus, setUpdatingDeskStatus] = useState(false)
     const [showResetPassword, setShowResetPassword] = useState(false)
     const [currentPassword, setCurrentPassword] = useState('')
     const [newPassword, setNewPassword] = useState('')
@@ -641,10 +44,6 @@ function Dashboard() {
     const [addUserError, setAddUserError] = useState('')
     const [addUserSuccess, setAddUserSuccess] = useState(false)
 
-    const [showBookingConfirmation, setShowBookingConfirmation] = useState(false)
-    const [showBookingResult, setShowBookingResult] = useState(false)
-    const [bookingResult, setBookingResult] = useState(null)
-    const [bookingError, setBookingError] = useState('')
     const [bookingLoading, setBookingLoading] = useState(false)
 
     const [dialog, setDialog] = useState({
@@ -827,7 +226,11 @@ function Dashboard() {
     }
 
     async function toggleSelect(desk) {
-        if (desk.status === 'INACTIVE' || desk.status === 'UNAVAILABLE') {
+        if (desk.status === 'UNAVAILABLE') {
+            return
+        }
+
+        if (desk.status === 'INACTIVE' && user?.role !== 'ADMIN') {
             return
         }
 
@@ -865,6 +268,54 @@ function Dashboard() {
         if (!isSameDesk) {
             setBookingFromDate(date)
             setBookingToDate('')
+        }
+    }
+
+    async function handleSetActiveStatus(isActive) {
+        if (!selectedDesk || user?.role !== 'ADMIN') return
+
+        try {
+            setUpdatingDeskStatus(true)
+            // if (selectedDesk.status == "BOOKED") {
+            //     setDialog({
+            //         open: true,
+            //         type: 'error',
+            //         title: 'Please cancel the existing booking.',
+            //         booking: null,
+            //     })
+
+            //     return;
+            // }
+
+            await setDeskActiveStatus(selectedDesk.deskId, isActive)
+
+            const updatedDesks = await getDesksBySection(
+                selectedSection,
+                date
+            )
+
+            const safeDesks = Array.isArray(updatedDesks) ? updatedDesks : []
+            setDesks(safeDesks)
+
+            const updatedSelectedDesk = safeDesks.find(
+                desk => desk.deskId === selectedDesk.deskId
+            )
+
+            if (updatedSelectedDesk) {
+                setSelected(updatedSelectedDesk.deskId)
+            }
+        } catch (err) {
+            console.error('Failed to update desk status:', err)
+
+            setDialog({
+                open: true,
+                type: 'error',
+                title: 'Desk Status Update Failed',
+                message: err.message || 'Unable to update desk status.',
+                booking: null,
+            })
+        } finally {
+            setUpdatingDeskStatus(false)
         }
     }
 
@@ -1025,7 +476,39 @@ function Dashboard() {
                                             {selectedDesk.status}
                                         </p>
                                     </div>
-                                    <StatusDot status={selectedDesk.status} />
+                                    {/* <StatusDot status={selectedDesk.status} /> */}
+
+                                    {user?.role === 'ADMIN' && (
+                                        <div className="rounded-xl border border-base-300 bg-base-200/50">
+                                            <div className="flex items-center justify-between gap-4">
+
+                                                <button
+                                                    type="button"
+                                                    className={`btn btn-sm ${selectedDesk.status === 'INACTIVE'
+                                                        ? 'btn-success'
+                                                        : 'btn-error btn-outline'
+                                                        }`}
+                                                    disabled={
+                                                        updatingDeskStatus ||
+                                                        selectedDesk.status === 'UNAVAILABLE'
+                                                    }
+                                                    onClick={() =>
+                                                        handleSetActiveStatus(
+                                                            selectedDesk.status === 'INACTIVE'
+                                                        )
+                                                    }
+                                                >
+                                                    {updatingDeskStatus ? (
+                                                        <span className="loading loading-spinner loading-xs" />
+                                                    ) : selectedDesk.status === 'INACTIVE' ? (
+                                                        'Activate'
+                                                    ) : (
+                                                        'Deactivate'
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="mt-6">
@@ -1115,6 +598,26 @@ function Dashboard() {
                                         selectedDesk={selectedDesk}
                                         deskBookings={deskBookings}
                                         loading={loadingDeskBookings}
+                                        onBookingCancelled={async () => {
+                                            if (!selectedDesk) return
+
+                                            try {
+                                                // Refresh booking history
+                                                const updatedBookings = await getDeskBookings(
+                                                    selectedDesk.deskId
+                                                )
+
+                                                setDeskBookings(updatedBookings || [])
+
+                                                // Refresh desk availability/status
+                                                await loadDesks(false)
+                                            } catch (err) {
+                                                console.error(
+                                                    'Failed to refresh after cancellation:',
+                                                    err
+                                                )
+                                            }
+                                        }}
                                     />
                                 )}
 
@@ -1444,6 +947,7 @@ function Dashboard() {
                     date={date}
                     setDate={setDate}
                     loading={loading}
+                    canManageInactive={user?.role === 'ADMIN'}
                 />
             </div>
             {showAddUser && (
@@ -1864,187 +1368,7 @@ function Dashboard() {
                 </div>
             )}
 
-            {showBookingConfirmation && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="w-full max-w-md rounded-2xl bg-base-100 p-6 shadow-2xl">
-
-                        <h2 className="text-xl font-bold">
-                            Confirm Booking
-                        </h2>
-
-                        <div className="mt-4 space-y-2 text-sm">
-                            <p>
-                                <span className="opacity-60">Desk:</span>{' '}
-                                <span className="font-semibold">
-                                    {selectedDesk?.deskNumber}
-                                </span>
-                            </p>
-
-                            <p>
-                                <span className="opacity-60">From:</span>{' '}
-                                <span className="font-semibold">
-                                    {formatBookingDate(fromDate)}
-                                </span>
-                            </p>
-
-                            <p>
-                                <span className="opacity-60">To:</span>{' '}
-                                <span className="font-semibold">
-                                    {formatBookingDate(toDate || fromDate)}
-                                </span>
-                            </p>
-                        </div>
-
-                        <div className="mt-6 flex gap-3">
-                            <button
-                                type="button"
-                                className="btn btn-ghost flex-1"
-                                onClick={() => setShowBookingConfirmation(false)}
-                            >
-                                Cancel
-                            </button>
-
-                            <button
-                                type="button"
-                                className="btn btn-primary flex-1"
-                                disabled={bookingLoading}
-                                onClick={confirmBooking}
-                            >
-                                {bookingLoading ? (
-                                    <span className="loading loading-spinner loading-sm"></span>
-                                ) : (
-                                    'Confirm'
-                                )}
-                            </button>
-                        </div>
-
-                    </div>
-                </div>
-            )}
-
-            {showBookingResult && bookingResult && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="w-full max-w-lg rounded-2xl bg-base-100 shadow-2xl">
-
-                        <div className="p-6">
-
-                            <div className="mb-5 flex items-center gap-3">
-                                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/15 text-success">
-                                    ✓
-                                </div>
-
-                                <div>
-                                    <h2 className="text-xl font-bold">
-                                        Booking Completed
-                                    </h2>
-
-                                    <p className="text-sm opacity-60">
-                                        Desk {bookingResult.deskNumber}
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Successfully booked */}
-                            {bookingResult.bookings?.length > 0 && (
-                                <div className="mb-4 rounded-xl bg-success/10 p-4">
-                                    <p className="mb-2 font-semibold text-success">
-                                        Successfully booked
-                                    </p>
-
-                                    <div className="space-y-1 text-sm">
-                                        {bookingResult.bookings.map((booking) => (
-                                            <div
-                                                key={booking.bookingId}
-                                                className="flex justify-between"
-                                            >
-                                                <span>
-                                                    {formatBookingDate(booking.date)}
-                                                </span>
-
-                                                <span className="font-medium">
-                                                    Booking confirmed
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Skipped */}
-                            {bookingResult.skippedDates?.length > 0 && (
-                                <div className="mb-4 rounded-xl bg-warning/10 p-4">
-                                    <p className="mb-2 font-semibold text-warning">
-                                        Skipped dates
-                                    </p>
-
-                                    <div className="space-y-2 text-sm">
-                                        {bookingResult.skippedDates.map(
-                                            (item, index) => (
-                                                <div
-                                                    key={`${item.date}-${index}`}
-                                                    className="flex flex-col"
-                                                >
-                                                    <span className="font-medium">
-                                                        {formatBookingDate(item.date)}
-                                                    </span>
-
-                                                    <span className="opacity-70">
-                                                        {item.reason}
-                                                    </span>
-                                                </div>
-                                            )
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            <button
-                                type="button"
-                                className="btn btn-primary w-full"
-                                onClick={() => {
-                                    setShowBookingResult(false)
-                                    setBookingResult(null)
-                                }}
-                            >
-                                Done
-                            </button>
-
-                        </div>
-                    </div>
-                </div>
-            )}
-            {bookingError && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="w-full max-w-md rounded-2xl bg-base-100 p-6 shadow-2xl">
-
-                        <div className="text-center">
-
-                            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-error/15 text-2xl text-error">
-                                !
-                            </div>
-
-                            <h2 className="text-xl font-bold">
-                                Booking Failed
-                            </h2>
-
-                            <p className="mt-3 text-sm opacity-70">
-                                {bookingError}
-                            </p>
-
-                            <button
-                                type="button"
-                                className="btn btn-primary mt-6 w-full"
-                                onClick={() => setBookingError('')}
-                            >
-                                OK
-                            </button>
-
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     )
 }
 
-export default Dashboard
