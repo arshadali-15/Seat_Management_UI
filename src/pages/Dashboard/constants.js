@@ -5,25 +5,25 @@ export const SECTIONS = [
     {
         id: 'BAY_AREA',
         label: 'Bay Area',
-        description: 'Bay Area',
+        description: 'Bay Area desks',
         total: 23
     },
     {
         id: 'NEXUS_L1',
         label: 'Nexus L1',
-        description: 'Desks from DR1 till DR4',
+        description: 'Desks from DR1 to DR4',
         total: 43
     },
     {
         id: 'NEXUS_R1',
         label: 'Nexus R1',
-        description: 'Desks from HR Cabin till Saturn',
+        description: 'Desks from HR Cabin to Saturn',
         total: 53
     },
     {
         id: 'WORKSTATION',
         label: 'Workstation',
-        description: "Desks from server room till Director's room",
+        description: "Desks from the Server Room to the Director's Room",
         total: 114
     },
 ]

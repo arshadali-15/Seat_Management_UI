@@ -7,8 +7,6 @@ import { useAuth } from '../../context/AuthContext'
 import { SECTIONS } from './constants'
 import { getToday, getBookingErrorMessage } from './utils'
 import ChairIcon from './components/ChairIcon'
-import StatusDot from './components/StatusDot'
-import DeskButton from './components/DeskButton'
 import SectionSelector from './components/SectionSelector'
 import SectionDeskMap from './components/SectionDeskMap'
 import StatCard from './components/StatCard'
@@ -291,10 +289,11 @@ export default function Dashboard() {
     }
 
     async function handleSetActiveStatus(isActive) {
-        if (!selectedDesk || user?.role !== 'ADMIN') return
+        if (!selectedDesk) return
 
         try {
             setUpdatingDeskStatus(true)
+
             // if (selectedDesk.status == "BOOKED") {
             //     setDialog({
             //         open: true,
@@ -306,31 +305,39 @@ export default function Dashboard() {
             //     return;
             // }
 
-            await setDeskActiveStatus(selectedDesk.deskId, isActive)
+            await setDeskActiveStatus(
+                selectedDesk.deskId,
+                isActive
+            )
 
             const updatedDesks = await getDesksBySection(
                 selectedSection,
                 date
             )
 
-            const safeDesks = Array.isArray(updatedDesks) ? updatedDesks : []
-            setDesks(safeDesks)
-
-            const updatedSelectedDesk = safeDesks.find(
-                desk => desk.deskId === selectedDesk.deskId
+            setDesks(
+                Array.isArray(updatedDesks)
+                    ? updatedDesks
+                    : []
             )
 
-            if (updatedSelectedDesk) {
-                setSelected(updatedSelectedDesk.deskId)
-            }
+            // Close the side panel
+            setSelected(null)
+            setDeskBookings([])
+
         } catch (err) {
-            console.error('Failed to update desk status:', err)
+            console.error(
+                'Failed to update desk status:',
+                err
+            )
 
             setDialog({
                 open: true,
                 type: 'error',
-                title: 'Desk Status Update Failed',
-                message: err.message || 'Unable to update desk status.',
+                title: 'Status Update Failed',
+                message:
+                    err.message ||
+                    'Unable to update desk status.',
                 booking: null,
             })
         } finally {
