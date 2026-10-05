@@ -5,7 +5,7 @@ export default function SectionSelector({ selectedSection, onSectionChange }) {
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {SECTIONS.map(section => {
                 const isSelected = selectedSection === section.id
-                const total = section.end - section.start + 1
+                const total = section.total
 
                 return (
                     <button
