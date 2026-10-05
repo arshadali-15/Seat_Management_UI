@@ -20,7 +20,7 @@ export default function Dashboard() {
     const [desks, setDesks] = useState([])
     const [loading, setLoading] = useState(true)
     const [selected, setSelected] = useState(null)
-    const [selectedSection, setSelectedSection] = useState('CSM')
+    const [selectedSection, setSelectedSection] = useState('BAY_AREA')
     const [date, setDate] = useState(() => getToday())
     const [bookingFromDate, setBookingFromDate] = useState(getToday())
     const [bookingToDate, setBookingToDate] = useState('')
@@ -192,6 +192,25 @@ export default function Dashboard() {
             setAddUserLoading(false)
         }
     }
+    const getFridayOfWeek = (dateString) => {
+        if (!dateString) return '';
+
+        const date = new Date(`${dateString}T00:00:00`);
+        const day = date.getDay(); // Sunday = 0, Monday = 1, ..., Friday = 5
+
+        const daysUntilFriday = 5 - day;
+
+        const friday = new Date(date);
+        friday.setDate(date.getDate() + daysUntilFriday);
+
+        const year = friday.getFullYear();
+        const month = String(friday.getMonth() + 1).padStart(2, '0');
+        const dayOfMonth = String(friday.getDate()).padStart(2, '0');
+
+        return `${year}-${month}-${dayOfMonth}`;
+    };
+
+
 
     useEffect(() => {
         setSelected(null)
@@ -577,6 +596,8 @@ export default function Dashboard() {
                                                         bookingFromDate ||
                                                         getToday()
                                                     }
+                                                    max={bookingFromDate ? getFridayOfWeek(bookingFromDate) : ''}
+                                                    disabled={!bookingFromDate}
                                                     onChange={e =>
                                                         setBookingToDate(
                                                             e.target.value
@@ -646,9 +667,9 @@ export default function Dashboard() {
                                             Booking...
                                         </>
                                     ) : (
-                                        'Book Desk'
+                                        'Book Desk '
                                     )}
-                                        Book Desk {selectedDesk.deskNumber}
+                                        {selectedDesk.deskNumber}
                                     </button>
                                 </div>
                             )}
