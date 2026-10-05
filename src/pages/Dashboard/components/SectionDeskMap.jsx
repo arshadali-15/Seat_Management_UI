@@ -38,7 +38,7 @@ export default function SectionDeskMap({
                         <div className="flex flex-wrap items-center gap-3">
                             <h2 className="text-lg font-bold">{section.label}</h2>
                             <span className="badge badge-ghost">
-                                {section.end - section.start + 1} desks
+                                {desks.length} desks
                             </span>
                         </div>
                         <p className="mt-1 text-sm opacity-55">
@@ -100,31 +100,23 @@ export default function SectionDeskMap({
                         </div>
                     ) : (
                         <div className="space-y-4 overflow-x-auto pb-1">
-                            {rows.map((row, rowIndex) => {
-                                const sectionDesks = row.slice(0, 15)
-                                // const right = row.slice(4)
-
-                                return (
-                                    <div
-                                        key={`row-${rowIndex}`}
-                                    >
-                                        <div className="grid grid-cols-15 gap-x-2 gap-y-3 w-fit mx-auto">
-                                            {sectionDesks.map(desk => (
-                                                <DeskButton
-                                                    key={desk.deskId}
-                                                    desk={desk}
-                                                    isSelected={
-                                                        selected === desk.deskId
-                                                    }
-                                                    onClick={onDeskClick}
-                                                    isTopRow={rowIndex == 0}
-                                                    canManageInactive={canManageInactive}
-                                                />
-                                            ))}
-                                        </div>
+                            {rows.map((row, rowIndex) => (
+                                <div key={`row-${rowIndex}`}>
+                                    <div className="grid grid-cols-15 gap-x-2 gap-y-3 w-fit mx-auto">
+                                        {row.map(desk => (
+                                            <DeskButton
+                                                key={desk.deskId}
+                                                desk={desk}
+                                                isSelected={selected === desk.deskId}
+                                                onClick={onDeskClick}
+                                                isTopRow={rowIndex === 0}
+                                                canManageInactive={canManageInactive}
+                                            />
+                                        ))}
                                     </div>
-                                )
-                            })}
+                                </div>
+                            ))}
+
                         </div>
                     )}
                 </div>
