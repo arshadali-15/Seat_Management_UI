@@ -114,7 +114,7 @@ export default function BookingDetails({
                                         </p>
                                     </div>
 
-                                    {user?.role === 'ADMIN' && (
+                                    {(user?.role === 'ADMIN' || user?.slsId === deskBookings.bookedById) && (
                                         <button
                                             type="button"
                                             className="btn btn-sm btn-error btn-outline"
