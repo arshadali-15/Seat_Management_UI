@@ -3,12 +3,11 @@ import { getDesksBySection, setDeskActiveStatus } from '../../services/deskServi
 import { bookDesk, getDeskBookings } from '../../services/bookingService'
 import { resetPassword, addUser } from '../../services/authService'
 import { useAuth } from '../../context/AuthContext'
+import { Eye, EyeOff } from "lucide-react";
 
 import { SECTIONS } from './constants'
 import { getToday, getBookingErrorMessage } from './utils'
 import ChairIcon from './components/ChairIcon'
-import StatusDot from './components/StatusDot'
-import DeskButton from './components/DeskButton'
 import SectionSelector from './components/SectionSelector'
 import SectionDeskMap from './components/SectionDeskMap'
 import StatCard from './components/StatCard'
@@ -20,7 +19,7 @@ export default function Dashboard() {
     const [desks, setDesks] = useState([])
     const [loading, setLoading] = useState(true)
     const [selected, setSelected] = useState(null)
-    const [selectedSection, setSelectedSection] = useState('CSM')
+    const [selectedSection, setSelectedSection] = useState('BAY_AREA')
     const [date, setDate] = useState(() => getToday())
     const [bookingFromDate, setBookingFromDate] = useState(getToday())
     const [bookingToDate, setBookingToDate] = useState('')
@@ -43,6 +42,10 @@ export default function Dashboard() {
     const [addUserLoading, setAddUserLoading] = useState(false)
     const [addUserError, setAddUserError] = useState('')
     const [addUserSuccess, setAddUserSuccess] = useState(false)
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [showNewUserPassword, setShowNewUserPassword] = useState(false);
 
     const [bookingLoading, setBookingLoading] = useState(false)
 
@@ -53,6 +56,17 @@ export default function Dashboard() {
         message: '',
         booking: null,
     })
+
+
+    const isDefaultPassword =
+        sessionStorage.getItem('isDefaultPassword') === 'true';
+
+
+    useEffect(() => {
+        if (isDefaultPassword) {
+            setShowResetPassword(true);
+        }
+    }, [isDefaultPassword]);
 
     async function loadDesks(showLoader = true) {
         if (showLoader) setLoading(true)
@@ -84,9 +98,16 @@ export default function Dashboard() {
     async function handleResetPassword() {
         setResetError('')
 
-        if (!currentPassword || !newPassword || !confirmPassword) {
-            setResetError('Please fill in all password fields.')
-            return
+        if (isDefaultPassword) {
+            if (!newPassword || !confirmPassword) {
+                setResetError('Please fill in all password fields.')
+                return
+            }
+        } else {
+            if (!currentPassword || !newPassword || !confirmPassword) {
+                setResetError('Please fill in all password fields.')
+                return
+            }
         }
 
         if (newPassword.length < 6) {
@@ -102,8 +123,10 @@ export default function Dashboard() {
         try {
             setResetLoading(true)
 
+            // setCurrentPassword(isDefaultPassword ? 'password@123' : currentPassword)
+
             await resetPassword(
-                currentPassword,
+                isDefaultPassword ? 'password@123' : currentPassword,
                 newPassword
             )
 
@@ -112,6 +135,11 @@ export default function Dashboard() {
             setNewPassword('')
             setConfirmPassword('')
             setResetSuccess(true)
+
+            sessionStorage.setItem(
+                'isDefaultPassword',
+                false
+            )
 
         } catch (err) {
             console.error('Password reset failed:', err)
@@ -192,6 +220,23 @@ export default function Dashboard() {
             setAddUserLoading(false)
         }
     }
+    const getFridayOfWeek = () => {
+        const today = new Date();
+        const day = today.getDay();
+
+        // Friday = 5
+        const daysUntilFriday = (5 - day + 7) % 7;
+
+        const friday = new Date(today);
+        friday.setDate(today.getDate() + daysUntilFriday);
+
+        const year = friday.getFullYear();
+        const month = String(friday.getMonth() + 1).padStart(2, '0');
+        const dayOfMonth = String(friday.getDate()).padStart(2, '0');
+
+        return `${year}-${month}-${dayOfMonth}`;
+    };
+
 
     useEffect(() => {
         setSelected(null)
@@ -272,10 +317,11 @@ export default function Dashboard() {
     }
 
     async function handleSetActiveStatus(isActive) {
-        if (!selectedDesk || user?.role !== 'ADMIN') return
+        if (!selectedDesk) return
 
         try {
             setUpdatingDeskStatus(true)
+
             // if (selectedDesk.status == "BOOKED") {
             //     setDialog({
             //         open: true,
@@ -287,31 +333,39 @@ export default function Dashboard() {
             //     return;
             // }
 
-            await setDeskActiveStatus(selectedDesk.deskId, isActive)
+            await setDeskActiveStatus(
+                selectedDesk.deskId,
+                isActive
+            )
 
             const updatedDesks = await getDesksBySection(
                 selectedSection,
                 date
             )
 
-            const safeDesks = Array.isArray(updatedDesks) ? updatedDesks : []
-            setDesks(safeDesks)
-
-            const updatedSelectedDesk = safeDesks.find(
-                desk => desk.deskId === selectedDesk.deskId
+            setDesks(
+                Array.isArray(updatedDesks)
+                    ? updatedDesks
+                    : []
             )
 
-            if (updatedSelectedDesk) {
-                setSelected(updatedSelectedDesk.deskId)
-            }
+            // Close the side panel
+            setSelected(null)
+            setDeskBookings([])
+
         } catch (err) {
-            console.error('Failed to update desk status:', err)
+            console.error(
+                'Failed to update desk status:',
+                err
+            )
 
             setDialog({
                 open: true,
                 type: 'error',
-                title: 'Desk Status Update Failed',
-                message: err.message || 'Unable to update desk status.',
+                title: 'Status Update Failed',
+                message:
+                    err.message ||
+                    'Unable to update desk status.',
                 booking: null,
             })
         } finally {
@@ -390,8 +444,15 @@ export default function Dashboard() {
                 window.location.href = '/login'
                 return
             }
-            setShowBookingConfirmation(false)
-            setBookingError(getBookingErrorMessage(err))
+            setDialog({
+                open: true,
+                type: 'error',
+                title: err.errorCode || 'Failed to Book Desk',
+                message: err.message || 'You have an existing booking that is currently active.',
+                booking: null,
+            })
+            // setBookingError(getBookingErrorMessage(err))
+            setSelected(null)
         } finally {
             setBookingLoading(false)
         }
@@ -501,9 +562,9 @@ export default function Dashboard() {
                                                     {updatingDeskStatus ? (
                                                         <span className="loading loading-spinner loading-xs" />
                                                     ) : selectedDesk.status === 'INACTIVE' ? (
-                                                        'Activate'
+                                                        'Release'
                                                     ) : (
-                                                        'Deactivate'
+                                                        'Reserve'
                                                     )}
                                                 </button>
                                             </div>
@@ -557,11 +618,17 @@ export default function Dashboard() {
                                                     type="date"
                                                     value={bookingFromDate}
                                                     min={getToday()}
-                                                    onChange={e =>
-                                                        handleFromDateChange(
-                                                            e.target.value
-                                                        )
-                                                    }
+                                                    max={getFridayOfWeek()}
+                                                    onChange={e => {
+                                                        const date = e.target.value;
+
+                                                        if (
+                                                            date >= getToday() &&
+                                                            date <= getFridayOfWeek()
+                                                        ) {
+                                                            handleFromDateChange(date);
+                                                        }
+                                                    }}
                                                     className="input input-bordered w-full"
                                                 />
                                             </div>
@@ -577,11 +644,18 @@ export default function Dashboard() {
                                                         bookingFromDate ||
                                                         getToday()
                                                     }
-                                                    onChange={e =>
-                                                        setBookingToDate(
-                                                            e.target.value
-                                                        )
-                                                    }
+                                                    max={getFridayOfWeek()}
+                                                    disabled={!bookingFromDate}
+                                                    onChange={e => {
+                                                        const date = e.target.value;
+
+                                                        if (
+                                                            date >= (bookingFromDate || getToday()) &&
+                                                            date <= getFridayOfWeek()
+                                                        ) {
+                                                            setBookingToDate(date);
+                                                        }
+                                                    }}
                                                     className="input input-bordered w-full"
                                                 />
                                             </div>
@@ -646,9 +720,9 @@ export default function Dashboard() {
                                             Booking...
                                         </>
                                     ) : (
-                                        'Book Desk'
+                                        'Book Desk '
                                     )}
-                                        Book Desk {selectedDesk.deskNumber}
+                                        {selectedDesk.deskNumber}
                                     </button>
                                 </div>
                             )}
@@ -1076,31 +1150,53 @@ export default function Dashboard() {
                                     />
                                 </label>
 
-                                {/* Password */}
+                                {/* Temporary Password */}
                                 <label className="form-control">
                                     <span className="mb-2 text-sm font-semibold">
                                         Temporary Password
                                     </span>
+
                                     <div className="mt-1 flex justify-between text-xs opacity-50">
-                                        <span> Minimum 8 characters</span>
-                                        <span>{newUserPassword.length}/30</span>
+                                        <span>Minimum 6 characters</span>
+                                        <span>{newUserPassword.length}/20</span>
                                     </div>
 
-                                    <input
-                                        type="password"
-                                        className="input input-bordered w-full rounded-xl"
-                                        placeholder="Enter password"
-                                        value={newUserPassword}
-                                        maxLength={20}
-                                        onChange={(e) =>
-                                            setNewUserPassword(
-                                                e.target.value.slice(0, 20)
-                                            )
-                                        }
-                                        disabled={addUserLoading}
-                                    />
-                                </label>
+                                    <div className="relative">
+                                        <input
+                                            type={showNewUserPassword ? "text" : "password"}
+                                            className="input input-bordered w-full rounded-xl pr-12"
+                                            placeholder="Enter password"
+                                            value={newUserPassword}
+                                            maxLength={20}
+                                            onChange={(e) =>
+                                                setNewUserPassword(e.target.value.slice(0, 20))
+                                            }
+                                            minLength={6}
+                                            autoComplete="new-password"
+                                            disabled={addUserLoading}
+                                        />
 
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setShowNewUserPassword((prev) => !prev)
+                                            }
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 opacity-60 transition hover:opacity-100"
+                                            aria-label={
+                                                showNewUserPassword
+                                                    ? "Hide temporary password"
+                                                    : "Show temporary password"
+                                            }
+                                            disabled={addUserLoading}
+                                        >
+                                            {showNewUserPassword ? (
+                                                <EyeOff className="h-5 w-5" />
+                                            ) : (
+                                                <Eye className="h-5 w-5" />
+                                            )}
+                                        </button>
+                                    </div>
+                                </label>
                             </div>
                         </div>
 
@@ -1159,7 +1255,7 @@ export default function Dashboard() {
                     <div
                         className="absolute inset-0 bg-black/40 backdrop-blur-md"
                         onClick={() => {
-                            if (!resetLoading) setShowResetPassword(false)
+                            if (!resetLoading && !isDefaultPassword) setShowResetPassword(false)
                         }}
                     />
 
@@ -1195,7 +1291,7 @@ export default function Dashboard() {
 
                         {/* Body */}
                         <div className="px-6 py-6">
-
+                            {/* Error message */}
                             {resetError && (
                                 <div className="mb-5 flex items-start gap-3 rounded-xl border border-error/20 bg-error/10 p-3 text-sm text-error">
                                     <svg
@@ -1208,78 +1304,145 @@ export default function Dashboard() {
                                         <circle cx="12" cy="12" r="9" />
                                         <path d="M12 8v4M12 16h.01" />
                                     </svg>
-
                                     <span>{resetError}</span>
                                 </div>
                             )}
 
                             <div className="space-y-5">
+                                {/* Current Password */}
+                                {!isDefaultPassword && (
+                                    <label className="form-control">
+                                        <span className="mb-2 text-sm font-semibold">
+                                            Current Password
+                                        </span>
 
-                                {/* Current password */}
-                                <label className="form-control">
-                                    <span className="mb-2 text-sm font-semibold">
-                                        Current Password
-                                    </span>
+                                        <div className="relative">
+                                            <input
+                                                type={showCurrentPassword ? "text" : "password"}
+                                                className="input input-bordered mb-5 w-full rounded-xl pr-12"
+                                                value={currentPassword}
+                                                onChange={(e) =>
+                                                    setCurrentPassword(e.target.value.slice(0, 30))
+                                                }
+                                                placeholder="Enter current password"
+                                                autoComplete="current-password"
+                                                disabled={resetLoading}
+                                            />
 
-                                    <div className="relative">
-                                        <input
-                                            type="password"
-                                            className="input input-bordered w-full rounded-xl pr-4"
-                                            value={currentPassword}
-                                            onChange={(e) =>
-                                                setCurrentPassword(e.target.value.slice(0, 30))
-                                            }
-                                            placeholder="Enter current password"
-                                            disabled={resetLoading}
-                                        />
-                                    </div>
-                                </label>
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setShowCurrentPassword((prev) => !prev)
+                                                }
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 -translate-y-1/2 opacity-60 transition hover:opacity-100"
+                                                aria-label={
+                                                    showCurrentPassword
+                                                        ? "Hide current password"
+                                                        : "Show current password"
+                                                }
+                                                disabled={resetLoading}
+                                            >
+                                                {showCurrentPassword ? (
+                                                    <EyeOff className="h-5 w-5" />
+                                                ) : (
+                                                    <Eye className="h-5 w-5" />
+                                                )}
+                                            </button>
+                                        </div>
+                                    </label>
+                                )}
 
-                                {/* New password */}
+                                {/* New Password */}
                                 <label className="form-control">
                                     <span className="mb-2 text-sm font-semibold">
                                         New Password
                                     </span>
-                                    <div className="mt-1 flex justify-between text-xs opacity-50">
-                                        <span> Minimum 8 characters</span>
+
+                                    <div className="mb-2 mt-1 flex justify-between text-xs opacity-50">
+                                        <span>Minimum 6 characters</span>
                                         <span>{newPassword.length}/30</span>
                                     </div>
-                                    <input
-                                        type="password"
-                                        className="input input-bordered w-full rounded-xl"
-                                        value={newPassword}
-                                        onChange={(e) =>
-                                            setNewPassword(e.target.value.slice(0, 30))
-                                        }
-                                        placeholder="Enter new password"
-                                        minLength={6}
-                                        maxLength={30}
-                                        disabled={resetLoading}
-                                    />
+
+                                    <div className="relative mb-5">
+                                        <input
+                                            type={showNewPassword ? "text" : "password"}
+                                            className="input input-bordered w-full rounded-xl pr-12"
+                                            value={newPassword}
+                                            onChange={(e) =>
+                                                setNewPassword(e.target.value.slice(0, 30))
+                                            }
+                                            placeholder="Enter new password"
+                                            autoComplete="new-password"
+                                            minLength={6}
+                                            maxLength={30}
+                                            disabled={resetLoading}
+                                        />
+
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setShowNewPassword((prev) => !prev)
+                                            }
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 opacity-60 transition hover:opacity-100"
+                                            aria-label={
+                                                showNewPassword ? "Hide new password" : "Show new password"
+                                            }
+                                            disabled={resetLoading}
+                                        >
+                                            {showNewPassword ? (
+                                                <EyeOff className="h-5 w-5" />
+                                            ) : (
+                                                <Eye className="h-5 w-5" />
+                                            )}
+                                        </button>
+                                    </div>
                                 </label>
 
-                                {/* Confirm password */}
+                                {/* Confirm New Password */}
                                 <label className="form-control">
                                     <span className="mb-2 text-sm font-semibold">
                                         Confirm New Password
                                     </span>
 
-                                    <input
-                                        type="password"
-                                        className={`input w-full rounded-xl ${confirmPassword &&
-                                            newPassword !== confirmPassword
-                                            ? 'input-error'
-                                            : 'input-bordered'
-                                            }`}
-                                        value={confirmPassword}
-                                        onChange={(e) =>
-                                            setConfirmPassword(e.target.value.slice(0, 30))
-                                        }
-                                        minLength={6}
-                                        maxLength={30}
-                                        placeholder="Confirm new password"
-                                        disabled={resetLoading}
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type={showConfirmPassword ? "text" : "password"}
+                                            className={`input w-full rounded-xl pr-12 ${confirmPassword &&
+                                                newPassword !== confirmPassword
+                                                ? "input-error"
+                                                : "input-bordered"
+                                                }`}
+                                            value={confirmPassword}
+                                            onChange={(e) =>
+                                                setConfirmPassword(e.target.value.slice(0, 30))
+                                            }
+                                            placeholder="Confirm new password"
+                                            autoComplete="new-password"
+                                            minLength={6}
+                                            maxLength={30}
+                                            disabled={resetLoading}
+                                        />
+
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                setShowConfirmPassword((prev) => !prev)
+                                            }
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 opacity-60 transition hover:opacity-100"
+                                            aria-label={
+                                                showConfirmPassword
+                                                    ? "Hide confirm password"
+                                                    : "Show confirm password"
+                                            }
+                                            disabled={resetLoading}
+                                        >
+                                            {showConfirmPassword ? (
+                                                <EyeOff className="h-5 w-5" />
+                                            ) : (
+                                                <Eye className="h-5 w-5" />
+                                            )}
+                                        </button>
+                                    </div>
 
                                     {confirmPassword &&
                                         newPassword !== confirmPassword && (
@@ -1296,7 +1459,7 @@ export default function Dashboard() {
                             <button
                                 type="button"
                                 className="btn btn-ghost rounded-xl"
-                                disabled={resetLoading}
+                                disabled={resetLoading || isDefaultPassword}
                                 onClick={() => setShowResetPassword(false)}
                             >
                                 Cancel
