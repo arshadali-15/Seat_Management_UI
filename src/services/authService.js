@@ -25,6 +25,16 @@ export async function login(email, password) {
 
   const data = await response.json()
 
+
+  if (password == "password@123") {
+    sessionStorage.setItem(
+      'isDefaultPassword',
+      true
+    )
+  } else {
+    sessionStorage.setItem("isDefaultPassword", "false");
+  }
+
   sessionStorage.setItem(
     'accessToken',
     data.accessToken
