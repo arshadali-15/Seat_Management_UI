@@ -28,6 +28,23 @@ export default function SectionDeskMap({
         return result
     }, [desks])
 
+    const getFridayOfWeek = () => {
+        const today = new Date();
+        const day = today.getDay();
+
+        // Friday = 5
+        const daysUntilFriday = (5 - day + 7) % 7;
+
+        const friday = new Date(today);
+        friday.setDate(today.getDate() + daysUntilFriday);
+
+        const year = friday.getFullYear();
+        const month = String(friday.getMonth() + 1).padStart(2, '0');
+        const dayOfMonth = String(friday.getDate()).padStart(2, '0');
+
+        return `${year}-${month}-${dayOfMonth}`;
+    };
+
     if (!section) return null
 
     return (
@@ -38,7 +55,7 @@ export default function SectionDeskMap({
                         <div className="flex flex-wrap items-center gap-3">
                             <h2 className="text-lg font-bold">{section.label}</h2>
                             <span className="badge badge-ghost">
-                                {section.end - section.start + 1} desks
+                                {desks.length} desks
                             </span>
                         </div>
                         <p className="mt-1 text-sm opacity-55">
@@ -53,7 +70,17 @@ export default function SectionDeskMap({
                                 type="date"
                                 value={date}
                                 min={getToday()}
-                                onChange={e => setDate(e.target.value)}
+                                max={getFridayOfWeek()}
+                                onChange={e => {
+                                    const selectedDate = e.target.value;
+
+                                    if (
+                                        selectedDate >= getToday() &&
+                                        selectedDate <= getFridayOfWeek()
+                                    ) {
+                                        setDate(selectedDate);
+                                    }
+                                }}
                                 className="input input-bordered input-sm"
                             />
                         </label>
@@ -66,7 +93,7 @@ export default function SectionDeskMap({
                                 <StatusDot status="BOOKED" /> Booked
                             </span>
                             <span className="flex items-center gap-1.5">
-                                <StatusDot status="INACTIVE" /> Inactive
+                                <StatusDot status="INACTIVE" /> Reserved
                             </span>
                         </div>
                     </div>
@@ -100,31 +127,23 @@ export default function SectionDeskMap({
                         </div>
                     ) : (
                         <div className="space-y-4 overflow-x-auto pb-1">
-                            {rows.map((row, rowIndex) => {
-                                const sectionDesks = row.slice(0, 15)
-                                // const right = row.slice(4)
-
-                                return (
-                                    <div
-                                        key={`row-${rowIndex}`}
-                                    >
-                                        <div className="grid grid-cols-15 gap-x-2 gap-y-3 w-fit mx-auto">
-                                            {sectionDesks.map(desk => (
-                                                <DeskButton
-                                                    key={desk.deskId}
-                                                    desk={desk}
-                                                    isSelected={
-                                                        selected === desk.deskId
-                                                    }
-                                                    onClick={onDeskClick}
-                                                    isTopRow={rowIndex == 0}
-                                                    canManageInactive={canManageInactive}
-                                                />
-                                            ))}
-                                        </div>
+                            {rows.map((row, rowIndex) => (
+                                <div key={`row-${rowIndex}`}>
+                                    <div className="grid grid-cols-15 gap-x-2 gap-y-3 w-fit mx-auto">
+                                        {row.map(desk => (
+                                            <DeskButton
+                                                key={desk.deskId}
+                                                desk={desk}
+                                                isSelected={selected === desk.deskId}
+                                                onClick={onDeskClick}
+                                                isTopRow={rowIndex === 0}
+                                                canManageInactive={canManageInactive}
+                                            />
+                                        ))}
                                     </div>
-                                )
-                            })}
+                                </div>
+                            ))}
+
                         </div>
                     )}
                 </div>
