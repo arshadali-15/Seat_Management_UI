@@ -2,6 +2,32 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { login } from '../../services/authService'
 import { useAuth } from '../../context/AuthContext'
+import { Eye, EyeOff } from "lucide-react";
+
+const stalkerMessages = [
+  "BRO... I CAN SEE THAT 👀",
+  "WHO GAVE YOU ACCESS?! 🥷",
+  "YOUR PASSWORD ISN'T SAFE HERE 😭",
+  "UMM... EXCUSE ME?! 🤨",
+  "I SAW NOTHING. NOTHING. 💀",
+  "BRO PUT THAT AWAY 🫣",
+  "NOT ME SNOOPING 😂",
+  "WE NEED TO TALK 👁️",
+  "OH CRAP, I'VE BEEN CAUGHT! 🏃",
+  "YOUR SECRET IS SAFE... MAYBE 🤫",
+  "DON'T MIND ME. KEEP TYPING. 👁️",
+  "INTERESTING PASSWORD CHOICE... 🤔",
+  "ACT NATURAL. THEY'RE WATCHING.",
+  "I WAS NEVER HERE. 💨",
+  "I'M IN YOUR CORNER. LITERALLY. 👀",
+  "CAUGHT YOU PEEKING! 🚨",
+  "NO PEEKING ON MY WATCH! 🥷",
+];
+
+const getRandomStalkerMessage = () =>
+  stalkerMessages[
+  Math.floor(Math.random() * stalkerMessages.length)
+  ];
 
 function Login() {
   const navigate = useNavigate()
@@ -10,6 +36,8 @@ function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false);
+  const [stalkerMessage, setStalkerMessage] = useState("");
 
   const [dialog, setDialog] = useState({
     open: false,
@@ -62,6 +90,34 @@ function Login() {
 
   return (
     <div className="min-h-screen bg-base-200 flex items-center justify-center p-4">
+      {/* Corner Stalker 👀 */}
+      {showPassword && (
+        <div
+          key="corner-stalker"
+          className="corner-stalker"
+          aria-hidden="true"
+        >
+          <div className="stalker-bubble">
+            {stalkerMessage}
+          </div>
+
+          <div className="stalker-character">
+            <div className="stalker-hood" />
+
+            <div className="stalker-face">
+              <span className="stalker-eye">
+                <span className="stalker-pupil" />
+              </span>
+
+              <span className="stalker-eye">
+                <span className="stalker-pupil" />
+              </span>
+            </div>
+
+            <div className="stalker-mouth" />
+          </div>
+        </div>
+      )}
 
       {/* Background decoration */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -86,21 +142,12 @@ function Login() {
               <div>
                 {/* Logo */}
                 <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 backdrop-blur">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-7 w-7"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M4 19V5a1 1 0 011-1h14a1 1 0 011 1v14M4 19h16M8 8h2m4 0h2M8 12h2m4 0h2M8 16h2m4 0h2"
-                      />
-                    </svg>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl  bg-base-200 backdrop-blur">
+                    <img
+                      src="https://media.licdn.com/dms/image/v2/D4E0BAQG0ZiTlB6NNpA/company-logo_200_200/company-logo_200_200/0/1712866084612/sodales_solutions_inc__logo?e=2147483647&v=beta&t=AG3Q41_O3MOWpCnBMwkpnlQwedsKdSUP_y39bMyNZN8"
+                      alt="Sodales Solutions Logo"
+                      className="h-12 w-12 rounded-2xl object-contain"
+                    />
                   </div>
 
                   <div>
@@ -148,20 +195,11 @@ function Login() {
             {/* Mobile logo */}
             <div className="mb-8 flex items-center gap-3 md:hidden">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-content">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M4 19V5a1 1 0 011-1h14a1 1 0 011 1v14M4 19h16M8 8h2m4 0h2M8 12h2m4 0h2M8 16h2m4 0h2"
-                  />
-                </svg>
+                <img
+                  src="https://media.licdn.com/dms/image/v2/D4E0BAQG0ZiTlB6NNpA/company-logo_200_200/company-logo_200_200/0/1712866084612/sodales_solutions_inc__logo?e=2147483647&v=beta&t=AG3Q41_O3MOWpCnBMwkpnlQwedsKdSUP_y39bMyNZN8"
+                  alt="Sodales Solutions Logo"
+                  className="h-12 w-12 rounded-2xl object-contain"
+                />
               </div>
 
               <div>
@@ -235,7 +273,7 @@ function Login() {
                 <label className="input input-bordered flex w-full items-center gap-3 transition focus-within:border-primary">
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 opacity-40"
+                    className="h-5 w-5 shrink-0 opacity-40"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -249,16 +287,35 @@ function Login() {
                   </svg>
 
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
-                    onChange={event =>
-                      setPassword(event.target.value)
-                    }
+                    onChange={(event) => setPassword(event.target.value)}
                     placeholder="Enter your password"
                     disabled={loading}
                     autoComplete="current-password"
                     required
+                    className="min-w-0 flex-1 bg-transparent outline-none"
                   />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!showPassword) {
+                        setStalkerMessage(getRandomStalkerMessage());
+                      }
+                      setShowPassword((prev) => !prev);
+                    }}
+                    className="shrink-0 opacity-60 transition hover:opacity-100"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    disabled={loading}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5" />
+                    ) : (
+                      <Eye className="h-5 w-5" />
+                    )}
+                  </button>
                 </label>
               </div>
 
